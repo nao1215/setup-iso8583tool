@@ -1,0 +1,72 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run ShellCheck
+        run: shellcheck -x scripts/install.sh scripts/version_test.sh scripts/release_meta.sh scripts/release_meta_test.sh
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
+
+      - name: Test version normalization
+        run: bash scripts/version_test.sh
+
+      - name: Test release tag normalization
+        run: bash scripts/release_meta_test.sh
+
+  install:
+    name: Install (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup iso8583tool
+        id: setup
+        uses: ./
+        with:
+          version: latest
+
+      - name: Print resolved outputs
+        shell: bash
+        run: |
+          echo "version=${{ steps.setup.outputs.version }}"
+          echo "bin-path=${{ steps.setup.outputs.bin-path }}"
+          echo "install-dir=${{ steps.setup.outputs.install-dir }}"
+
+      - name: Verify iso8583tool on PATH (bash)
+        shell: bash
+        run: |
+          command -v iso8583tool
+          iso8583tool version
+
+      - name: Verify iso8583tool on PATH (PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Command iso8583tool
+          iso8583tool version
