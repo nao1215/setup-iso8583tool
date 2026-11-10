@@ -2,6 +2,7 @@
 
 [![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-setup--iso8583tool-blue?logo=github)](https://github.com/marketplace/actions/setup-iso8583tool)
 [![Test](https://github.com/nao1215/setup-iso8583tool/actions/workflows/test.yml/badge.svg)](https://github.com/nao1215/setup-iso8583tool/actions/workflows/test.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/setup-iso8583tool/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/setup-iso8583tool)
 
 GitHub Action to install the [iso8583tool](https://github.com/nao1215/iso8583tool) CLI.
 
