@@ -74,3 +74,114 @@ jobs:
         run: |
           Get-Command iso8583tool
           iso8583tool version
+
+  # A pinned version must install exactly that release, whether the input has
+  # the leading "v" or not, and a custom install-dir must be honoured.
+  install-pinned:
+    name: Install pinned ${{ matrix.version }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        version: [v0.9.0, 0.9.0]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup iso8583tool
+        id: setup
+        uses: ./
+        with:
+          version: ${{ matrix.version }}
+          install-dir: ${{ runner.temp }}/iso8583tool-pinned
+
+      - name: Verify the pinned release was installed
+        shell: bash
+        env:
+          OUT_VERSION: ${{ steps.setup.outputs.version }}
+          OUT_BIN_PATH: ${{ steps.setup.outputs.bin-path }}
+          OUT_INSTALL_DIR: ${{ steps.setup.outputs.install-dir }}
+          WANT_DIR: ${{ runner.temp }}/iso8583tool-pinned
+        run: |
+          set -euo pipefail
+          test "${OUT_VERSION}" = "v0.9.0" || { echo "version output: ${OUT_VERSION}" >&2; exit 1; }
+          test "${OUT_INSTALL_DIR}" = "${WANT_DIR}" || { echo "install-dir output: ${OUT_INSTALL_DIR}" >&2; exit 1; }
+          test -x "${OUT_BIN_PATH}" || { echo "bin-path is not executable: ${OUT_BIN_PATH}" >&2; exit 1; }
+          got="$(iso8583tool version)"
+          echo "${got}"
+          case "${got}" in
+            *0.9.0*) ;;
+            *) echo "iso8583tool on PATH is not v0.9.0" >&2; exit 1 ;;
+          esac
+
+  # Inputs that are not a release must fail the step instead of installing
+  # something else or succeeding with nothing on PATH. Malformed versions stop
+  # before any download; v0.0.0 is well-formed but was never released, so it
+  # fails at the download.
+  install-reject:
+    name: Reject invalid versions (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "Setup iso8583tool, expected to fail: upper-case V"
+        id: upper
+        continue-on-error: true
+        uses: ./
+        with:
+          version: V0.9.0
+
+      - name: "Setup iso8583tool, expected to fail: doubled v"
+        id: doubled
+        continue-on-error: true
+        uses: ./
+        with:
+          version: vv0.9.0
+
+      - name: "Setup iso8583tool, expected to fail: missing patch component"
+        id: short
+        continue-on-error: true
+        uses: ./
+        with:
+          version: "0.9"
+
+      - name: "Setup iso8583tool, expected to fail: a release that was never published"
+        id: missing
+        continue-on-error: true
+        uses: ./
+        with:
+          version: v0.0.0
+
+      - name: Every setup step must have failed and left nothing on PATH
+        shell: bash
+        env:
+          OUTCOME_UPPER: ${{ steps.upper.outcome }}
+          OUTCOME_DOUBLED: ${{ steps.doubled.outcome }}
+          OUTCOME_SHORT: ${{ steps.short.outcome }}
+          OUTCOME_MISSING: ${{ steps.missing.outcome }}
+        run: |
+          set -euo pipefail
+          status=0
+          for name in $(compgen -A variable OUTCOME_); do
+            if [ "${!name}" = "failure" ]; then
+              echo "ok:   ${name#OUTCOME_} failed"
+            else
+              echo "FAIL: ${name#OUTCOME_} -> ${!name}" >&2
+              status=1
+            fi
+          done
+          if command -v iso8583tool >/dev/null 2>&1; then
+            echo "FAIL: iso8583tool is on PATH after failed installs: $(command -v iso8583tool)" >&2
+            status=1
+          fi
+          exit "${status}"
