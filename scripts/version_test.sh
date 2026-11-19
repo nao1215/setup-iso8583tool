@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# version_test.sh - check that version resolution normalizes explicit versions
+# version_test.sh — check that version resolution normalizes explicit versions
 # and parses the GitHub API response for `latest`.
 #
 set -euo pipefail
@@ -29,35 +29,104 @@ check() {
   TAG="" NUM_VERSION=""
   resolve_version
   if [ "$TAG" != "$want_tag" ] || [ "$NUM_VERSION" != "$want_num" ]; then
-    printf 'FAIL: %-8s -> TAG=%s NUM=%s (want TAG=%s NUM=%s)\n' \
+    printf 'FAIL: %-8q -> TAG=%s NUM=%s (want TAG=%s NUM=%s)\n' \
       "$input" "$TAG" "$NUM_VERSION" "$want_tag" "$want_num"
     failures=$((failures + 1))
   else
-    printf 'ok:   %-8s -> TAG=%s NUM=%s\n' "$input" "$TAG" "$NUM_VERSION"
+    printf 'ok:   %-8q -> TAG=%s NUM=%s\n' "$input" "$TAG" "$NUM_VERSION"
   fi
 }
 
+# check_latest feeds resolve_version a canned API response, so any input that
+# means "latest" must come out as the tag in that response.
 check_latest() {
-  INPUT_VERSION="latest"
+  local input="$1"
+  INPUT_VERSION="$input"
   TAG="" NUM_VERSION=""
   gh_curl() {
-    printf '%s\n' '{"url":"https://api.github.com/repos/nao1215/iso8583tool/releases/1","tag_name":"v0.8.0","name":"v0.8.0"}'
+    printf '%s\n' '{"url":"https://api.github.com/repos/nao1215/iso8583tool/releases/1","tag_name":"v0.1.1","name":"v0.1.1"}'
   }
   resolve_version
-  if [ "$TAG" != "v0.8.0" ] || [ "$NUM_VERSION" != "0.8.0" ]; then
-    printf 'FAIL: latest -> TAG=%s NUM=%s (want TAG=v0.8.0 NUM=0.8.0)\n' "$TAG" "$NUM_VERSION"
+  if [ "$TAG" != "v0.1.1" ] || [ "$NUM_VERSION" != "0.1.1" ]; then
+    printf 'FAIL: %-8q -> TAG=%s NUM=%s (want TAG=v0.1.1 NUM=0.1.1)\n' "$input" "$TAG" "$NUM_VERSION"
     failures=$((failures + 1))
   else
-    printf 'ok:   latest   -> TAG=%s NUM=%s\n' "$TAG" "$NUM_VERSION"
+    printf 'ok:   %-8q -> TAG=%s NUM=%s\n' "$input" "$TAG" "$NUM_VERSION"
   fi
 }
 
-check_tag_name '{"tag_name":"v0.8.0"}' "v0.8.0"
-check_tag_name '{"name":"demo","tag_name":"v1.2.3","draft":false}' "v1.2.3"
-check "v0.8.0" "v0.8.0" "0.8.0"
-check "0.8.0"  "v0.8.0" "0.8.0"
-check " 0.8.0" "v0.8.0" "0.8.0"
-check_latest
+# check_latest_fails makes the API return a body without tag_name, which must
+# stop the install with an error instead of resolving to an empty tag.
+check_latest_fails() {
+  local out status
+  INPUT_VERSION="latest"
+  gh_curl() { printf '%s\n' '{"message":"Not Found"}'; }
+  set +e
+  out="$(resolve_version 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    printf 'FAIL: latest with no tag_name resolved (output: %s)\n' "$out"
+    failures=$((failures + 1))
+  else
+    printf 'ok:   latest with no tag_name fails: %s\n' "$out"
+  fi
+}
+
+# check_rejected expects resolve_version to stop with an "invalid version"
+# error before any download, instead of turning the input into a tag such as
+# vvX.Y.Z that only fails later as a 404 naming an asset nobody asked for.
+check_rejected() {
+  local input="$1" out status
+  INPUT_VERSION="$input"
+  gh_curl() { printf 'gh_curl must not be called for %s\n' "$INPUT_VERSION" >&2; return 1; }
+  set +e
+  out="$(resolve_version 2>&1)"
+  status=$?
+  set -e
+  case "$status:$out" in
+    0:*)
+      printf 'FAIL: %-8q was accepted (TAG would be built from it)\n' "$input"
+      failures=$((failures + 1))
+      ;;
+    *'invalid version'*)
+      printf 'ok:   %-8q rejected\n' "$input"
+      ;;
+    *)
+      printf 'FAIL: %-8q failed without naming the invalid version: %s\n' "$input" "$out"
+      failures=$((failures + 1))
+      ;;
+  esac
+}
+
+check_tag_name '{"tag_name":"v0.1.1"}' "v0.1.1"
+# A release lists every asset, so the API response outgrows a pipe buffer. The
+# tag must come out without a pipe whose reader can stop early: piping the body
+# into grep -m1 lets pipefail turn the writer's SIGPIPE into a failed install
+# (setup-atago v0.1.1 did).
+# The API pretty-prints, so tag_name sits on an early line of its own.
+check_tag_name "$(printf '{\n  "tag_name": "v0.22.0",\n  "assets": ["%s"]\n}\n' "$(head -c 300000 /dev/zero | tr '\0' 'x')")" "v0.22.0"
+check_tag_name '{"name":"demo","tag_name":"v2.0.0","draft":false}' "v2.0.0"
+check "v0.1.0" "v0.1.0" "0.1.0"
+check "0.1.0"  "v0.1.0" "0.1.0"
+check " 0.1.0" "v0.1.0" "0.1.0" # surrounding whitespace is trimmed
+check $'v0.26.1\n' "v0.26.1" "0.26.1" # a trailing newline from a multi-line YAML value
+check $'\tv0.26.1 ' "v0.26.1" "0.26.1"
+check "v10.20.30" "v10.20.30" "10.20.30" # multi-digit components
+check "v1.0.0-rc.1" "v1.0.0-rc.1" "1.0.0-rc.1" # pre-release suffix is kept
+check "1.0.0-rc.1"  "v1.0.0-rc.1" "1.0.0-rc.1"
+check_latest "latest"
+check_latest ""   # the input left empty means latest
+check_latest "  " # whitespace only means latest too
+check_latest_fails
+check_rejected "vv0.1.0"     # doubled prefix
+check_rejected "V0.1.0"      # tags are lower-case v
+check_rejected "Latest"      # only the exact word latest resolves the newest release
+check_rejected "v"           # prefix without a version
+check_rejected "0.1"         # missing patch component
+check_rejected "0.1.0.0"     # extra component
+check_rejected "v0.1.0 beta" # inner whitespace
+check_rejected "0.1.0/../x"  # path segments in the download URL
 
 if [ "$failures" -ne 0 ]; then
   printf '%d test(s) failed\n' "$failures" >&2
