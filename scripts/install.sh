@@ -8,9 +8,9 @@
 # PowerShell).
 #
 # Release artifacts are produced by iso8583tool's goreleaser config, e.g.:
-#   iso8583tool_0.8.0_linux_amd64.tar.gz
-#   iso8583tool_0.8.0_darwin_arm64.tar.gz
-#   iso8583tool_0.8.0_windows_amd64.zip
+#   iso8583tool_0.9.0_linux_amd64.tar.gz
+#   iso8583tool_0.9.0_darwin_arm64.tar.gz
+#   iso8583tool_0.9.0_windows_amd64.zip
 #   checksums.txt
 set -euo pipefail
 
@@ -37,13 +37,18 @@ to_github_path() {
   fi
 }
 
+# curl wrapper that adds the GitHub token when available. Branching avoids
+# expanding a possibly-empty array under `set -u` on older bash (macOS 3.2).
+# Five retries without --retry-delay back off 1, 2, 4, 8 and 16 seconds: the
+# release asset host has returned 504 for longer than three tries two seconds
+# apart, failing a job on a download that worked a minute later.
 gh_curl() {
   if [ -n "${INPUT_GITHUB_TOKEN:-}" ]; then
-    curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+    curl --fail --silent --show-error --location --retry 5 \
       -H "X-GitHub-Api-Version: 2022-11-28" \
       -H "Authorization: Bearer ${INPUT_GITHUB_TOKEN}" "$@"
   else
-    curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+    curl --fail --silent --show-error --location --retry 5 \
       -H "X-GitHub-Api-Version: 2022-11-28" "$@"
   fi
 }
@@ -180,13 +185,21 @@ main() {
   trap 'rm -rf "${workdir:-}"' EXIT
 
   local archive_path="${workdir}/${archive_name}"
+  local checksums_path="${workdir}/checksums.txt"
+  # checksums.txt is fetched while the archive downloads rather than after it:
+  # each download is a request and a redirect to the asset host, and waiting
+  # for one before starting the other added those round trips to every job.
+  local checksums_pid=""
+  if [ "${INPUT_VERIFY_CHECKSUM:-true}" = "true" ]; then
+    gh_curl -o "$checksums_path" "${base_url}/checksums.txt" &
+    checksums_pid=$!
+  fi
   log "Downloading ${base_url}/${archive_name}"
   gh_curl -o "$archive_path" "${base_url}/${archive_name}" \
     || die "failed to download ${archive_name}. Does release ${TAG} exist with this OS/arch?"
 
-  if [ "${INPUT_VERIFY_CHECKSUM:-true}" = "true" ]; then
-    local checksums_path="${workdir}/checksums.txt"
-    gh_curl -o "$checksums_path" "${base_url}/checksums.txt" \
+  if [ -n "$checksums_pid" ]; then
+    wait "$checksums_pid" \
       || die "verify-checksum is enabled but checksums.txt could not be downloaded for ${TAG}"
     verify_checksum "$archive_path" "$checksums_path" "$archive_name"
   else

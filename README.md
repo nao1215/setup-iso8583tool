@@ -1,8 +1,10 @@
 # setup-iso8583tool
 
-[![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-setup--iso8583tool-blue?logo=github)](https://github.com/marketplace/actions/setup-iso8583tool)
 [![Test](https://github.com/nao1215/setup-iso8583tool/actions/workflows/test.yml/badge.svg)](https://github.com/nao1215/setup-iso8583tool/actions/workflows/test.yml)
+[![Gitleaks](https://github.com/nao1215/setup-iso8583tool/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/nao1215/setup-iso8583tool/actions/workflows/gitleaks.yml)
 [![Trivy](https://github.com/nao1215/setup-iso8583tool/actions/workflows/trivy.yml/badge.svg)](https://github.com/nao1215/setup-iso8583tool/actions/workflows/trivy.yml)
+[![GitHub Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-setup--iso8583tool-blue?logo=github)](https://github.com/marketplace/actions/setup-iso8583tool)
+[![License](https://img.shields.io/github/license/nao1215/setup-iso8583tool)](./LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/nao1215/setup-iso8583tool/badge)](https://scorecard.dev/viewer/?uri=github.com/nao1215/setup-iso8583tool)
 
 GitHub Action to install the [iso8583tool](https://github.com/nao1215/iso8583tool) CLI.
@@ -25,7 +27,7 @@ That's it - `iso8583tool` is now on `PATH`.
 ```yaml
 - uses: nao1215/setup-iso8583tool@v0
   with:
-    version: v0.8.0 # default: latest
+    version: v0.9.0 # default: latest
 ```
 
 For reproducible CI, pin an exact version instead of `latest`, so a new
@@ -35,7 +37,7 @@ iso8583tool release cannot change what your workflow installs.
 
 | Name                 | Default               | Description                                                        |
 | -------------------- | --------------------- | ------------------------------------------------------------------ |
-| `version`            | `latest`              | Release to install: `latest`, `v0.8.0`, or `0.8.0`.                |
+| `version`            | `latest`              | Release to install: `latest`, `v0.9.0`, or `0.9.0`.                |
 | `github-token`       | `${{ github.token }}` | Token for API requests / downloads (avoids rate limiting).         |
 | `install-dir`        | `$HOME/.iso8583tool/bin` | Where to install the binary. Added to `PATH`.                   |
 | `verify-checksum`    | `true`                | Verify the archive against `checksums.txt` (SHA-256).              |
@@ -46,7 +48,7 @@ iso8583tool release cannot change what your workflow installs.
 
 | Name          | Description                                        |
 | ------------- | -------------------------------------------------- |
-| `version`     | Installed version (e.g. `v0.8.0`).                 |
+| `version`     | Installed version (e.g. `v0.9.0`).                 |
 | `bin-path`    | Absolute path to the `iso8583tool` binary.         |
 | `install-dir` | Directory the binary was installed into.           |
 
