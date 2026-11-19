@@ -33,6 +33,10 @@ That's it - `iso8583tool` is now on `PATH`.
 For reproducible CI, pin an exact version instead of `latest`, so a new
 iso8583tool release cannot change what your workflow installs.
 
+The version must be `latest`, `vX.Y.Z` or `X.Y.Z` (a pre-release suffix such as
+`-rc.1` is allowed). Anything else, such as `V0.9.0` or `0.9`, fails the step
+before any download.
+
 ## Inputs
 
 | Name                 | Default               | Description                                                        |
@@ -78,6 +82,20 @@ When you want to cut a new Marketplace release:
 
 That keeps the Marketplace listing current while preserving the immutable full
 release tag (`v0.8.0`, `v0.8.1`, ...).
+
+## Testing
+
+| Technique | Bug class caught here |
+|---|---|
+| [Version input boundaries](scripts/version_test.sh) | `latest`, empty, whitespace, `v`-less and pre-release inputs resolving to the wrong tag, and malformed versions reaching the download URL |
+| [Release tag normalization](scripts/release_meta_test.sh) | Floating `vX` / `vX.Y` tags computed from a malformed release tag |
+| [Real-runner installs](.github/workflows/test.yml) | Asset naming, extraction, checksum and `PATH` breakage on Linux, macOS and Windows (amd64 / arm64), pinned and `v`-less versions installing something else, and invalid versions or a missing release passing silently |
+
+```shell
+shellcheck -x scripts/install.sh scripts/version_test.sh scripts/release_meta.sh scripts/release_meta_test.sh
+bash scripts/version_test.sh
+bash scripts/release_meta_test.sh
+```
 
 ## License
 
